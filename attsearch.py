@@ -1,13 +1,12 @@
 import imaplib
 import quopri
 import base64
-import email
 from getpass import getpass
+
 
 """
 Всё тщательно проверить.
 Протестить.
-По возможности внедрить quoted printable encoding.
 Дописать обработку исключений.
 Внедрить возможность загрузки вложения по имени.
 """
@@ -32,7 +31,10 @@ def get_attachs_name(ImapObj, letter_id):
         lens = len(attachname_base64[10:])
         lenx = lens - (lens % 4 if lens % 4 else 4)
         attachname_decoded = base64.b64decode(attachname_base64[10:lenx+10])
-        return attachname_decoded
+        return attachname_decoded.decode("utf-8")
+    def decode_quopri(attachname_quopri):
+        attachname_decoded = quopri.decodestring(attachname_quopri)[10:-1]
+        return attachname_decoded.decode("utf-8")
     result, data = M.fetch(str(letter_id), "(BODY)")
     letter_body = data[0].decode()
     pattern = "\"NAME\" "
@@ -44,20 +46,25 @@ def get_attachs_name(ImapObj, letter_id):
             return
         attachname_start = start + pattern_l + 1
         attachname_end = attachname_start + letter_body[attachname_start:].find("\"")
-        attachname_base64 = letter_body[attachname_start:attachname_end]
+        attachname_enc = letter_body[attachname_start:attachname_end]
         start += letter_body[attachname_start:].find("\"") + pattern_l + 1
-        if attachname_base64.startswith("=?UTF-8?B?"):
-            if ' ' in attachname_base64:
-                attachname_list = attachname_base64.split()
-                attachname = "".join(decode_base64(part).decode("utf-8").strip()
-                                            for part in attachname_list)
+        if attachname_enc.lower().startswith("=?utf-8?b?"):    #TO FIND SHORTER SOLUTION
+            if ' ' in attachname_enc:
+                attachname_list = attachname_enc.split()
+                attachname = "".join(decode_base64(part)
+                                     for part in attachname_list)
             else:
-                attachname = decode_base64(attachname_base64).decode("utf-8").strip()
-        #elif attachname_base64.startswith("=?utf-8?Q?"):
-            #quopri.decodestring()
+                attachname = decode_base64(attachname_enc)
+        elif attachname_enc.lower().startswith("=?utf-8?q?"):
+            if ' ' in attachname_enc:
+                attachname_list = attachname_enc.split()
+                attachname = "".join(decode_quopri(part)
+                                     for part in attachname_list)
+            else:
+                attachname = decode_quopri(attachname_enc)
         else:
-            attachname = attachname_base64
-        print(attachname)
+            attachname = attachname_enc
+        yield attachname
 
 
 if __name__ == "__main__":
@@ -76,8 +83,8 @@ if __name__ == "__main__":
     print("Из них писем с вложениями --- %d" % attach_numb)
     print("Писем с файлом формата %s --- %d" % (attach_format, spec_format_numb))
     """
-    get_attachs_name(M, 518) #Hardcode
-    #for name in :
-        #print(name)
+    for name in get_attachs_name(M, 515):
+        print(name)
     M.close()
     M.logout()
+    
