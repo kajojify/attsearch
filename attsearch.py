@@ -5,6 +5,9 @@ import imaplib
 import zipfile
 from getpass import getpass
 
+# Произвести декомпозицию get_attnames
+# Устанавливать флаги прочитанных сообщений
+# Логгирование?
 
 def connect_mailbox(email, password):
     imap_server = "imap.gmail.com"
@@ -13,29 +16,19 @@ def connect_mailbox(email, password):
     imap_obj.select()
     return imap_obj
 
-
-def get_emails_number(imap_con, email_sender, attachment_format='zip'):
-    """Подсчитывает писем с вложениями заданного формата
-    для указанного отправителя. Возвращает кортеж с перечисленными
-    выше значениями. В случае наличия ошибок при поиске писем с
-    вложениями возвращается None."""
-
-    if not email_sender:
-        raise TypeError("Не указан обязательный аргумент sender_email")
-    criterion = 'X-GM-RAW "from:{} has:attachment filename:{}"'\
-                .format(email_sender, attachment_format)
-    result, data = imap_con.search(None, criterion)
-    if result != "OK":
-        raise imaplib.IMAP4_SSL.error("Не удалось произвести поиск "
-                                      "по критерию {}".format(criterion))
-    emails_numb = len(data[0].split())
-    return emails_numb
+def generate_criterion(email_sender, keywords):
+    keyword_str = ' '.join(map(str, keywords))
+    criterion = "from:{} has:attachment filename:{{{}}}"
+    return criterion.format(email_sender, keyword_str)
 
 
 def get_email_ids(imap_con, criterion):
-    if not criterion:
-        raise TypeError("Не указан обязательный аргумент criterion")
-    result, data = imap_con.search(None, criterion)
+    """Возвращает id тех писем, которые удовлетворяют критерию поиска."""
+
+    if not email_sender:
+        raise TypeError("Не указан обязательный аргумент sender_email")
+    imap_con.literal = criterion.encode("utf-8")
+    result, data = imap_con.search("utf-8", "X-GM-RAW")
     if result != "OK":
         raise imaplib.IMAP4_SSL.error("Не удалось произвести поиск "
                                       "по критерию %s" % criterion)
@@ -131,7 +124,8 @@ def close_connection(imap_con):
 
 if __name__ == "__main__":
     email_sender = "kacaruba.yura@mail.ru"
-    ids_criterion = 'X-GM-RAW "from:kacaruba.yura has:attachment"'
+    keywords = ['альфа', 'list_opt', 'эксмо', 'аст']
+    ids_criterion = generate_criterion(email_sender, keywords)
     email_login = input("Введите адрес электронной почты --- ")
     password = getpass("Введите пароль --- ")
     try:
@@ -140,12 +134,11 @@ if __name__ == "__main__":
         print("Не удалось подключиться к почтовому ящику.")
         print(error)
         exit("Завершение программы...")
-    emails_numb = get_emails_number(M, email_sender)
-    email_ids = get_email_ids(M, ids_criterion)
     try:
+        email_ids = get_email_ids(M, ids_criterion)
         for emid in email_ids:
             attname_list = get_attnames(M, emid)
-            download_attachment(M, emid, attname_list)
+            # download_attachment(M, emid, attname_list)
     except (imaplib.IMAP4_SSL.error, TypeError) as error:
         print(error)
         exit("Завершение программы...")
