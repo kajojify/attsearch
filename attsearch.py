@@ -6,65 +6,63 @@ import zipfile
 from getpass import getpass
 
 
-def connect_mailbox(imap_server, email, password):
-    ImapObj = imaplib.IMAP4_SSL(imap_server)
-    ImapObj.login(email, password)
-    ImapObj.select()
-    return ImapObj
+def connect_mailbox(email, password):
+    imap_server = "imap.gmail.com"
+    imap_obj = imaplib.IMAP4_SSL(imap_server)
+    imap_obj.login(email, password)
+    imap_obj.select()
+    return imap_obj
 
 
-def get_emails_number(ImapObj, sender_email, attachment_format="xls"):
-    """Подсчитывает количество писем, писем с вложениями, писем
-    с вложениями заданного формата для указанного отправителя.
-    Возвращает кортеж с перечисленными выше значениями. В случае
-    наличия ошибок при поиске писем с вложениями возвращается None."""
+def get_emails_number(imap_con, email_sender, attachment_format='zip'):
+    """Подсчитывает писем с вложениями заданного формата
+    для указанного отправителя. Возвращает кортеж с перечисленными
+    выше значениями. В случае наличия ошибок при поиске писем с
+    вложениями возвращается None."""
 
-    if not sender_email:
+    if not email_sender:
         raise TypeError("Не указан обязательный аргумент sender_email")
-    criterion = 'FROM "{}"'.format(sender_email)
-    result, data = ImapObj.search(None, criterion)
+    criterion = 'X-GM-RAW "from:{} has:attachment filename:{}"'\
+                .format(email_sender, attachment_format)
+    result, data = imap_con.search(None, criterion)
+    if result != "OK":
+        raise imaplib.IMAP4_SSL.error("Не удалось произвести поиск "
+                                      "по критерию {}".format(criterion))
+    emails_numb = len(data[0].split())
+    return emails_numb
+
+
+def get_email_ids(imap_con, criterion):
+    if not criterion:
+        raise TypeError("Не указан обязательный аргумент criterion")
+    result, data = imap_con.search(None, criterion)
     if result != "OK":
         raise imaplib.IMAP4_SSL.error("Не удалось произвести поиск "
                                       "по критерию %s" % criterion)
-    emails_numb = len(data[0].split())
-    if not emails_numb:
-        return 0, 0, 0
-
-    criterion = 'X-GM-RAW "from:{} has:attachment"'.format(sender_email)
-    result, data = ImapObj.search(None, criterion)
-    if result != "OK":
-        return emails_numb, None, None
-    attach_numb = len(data[0].split())
-    if not attach_numb:
-        return emails_numb, 0, 0
-
-    criterion = 'X-GM-RAW "from:{} has:attachment filename:{}"'\
-                .format(sender_email, attachment_format)
-    result, data = ImapObj.search(None, criterion)
-    if result != "OK":
-        return emails_numb, attach_numb, None
-    spec_format_numb = len(data[0].split())
-    return emails_numb, attach_numb, spec_format_numb
+    email_ids = data[0].decode("utf-8").split()
+    return [int(emid) for emid in email_ids]
 
 
-def get_attnames(ImapObj, email_id):
+def decode_base64(attname_base64):
+    """Предназначена для устранения ошибки incorrect padding
+    при попытке декодирования. Удаляет от 1 до 4 конечных
+    байт (символов)."""
+
+    main_len = len(attname_base64[10:])
+    # 10 - начало значимой части без "=?utf-8?b?"
+    new_main_len = main_len - (main_len % 4 if main_len % 4 else 4)
+    attname_decoded = base64.b64decode(attname_base64[10:new_main_len+10])
+    return attname_decoded.decode("utf-8")
+
+
+def decode_quopri(attname_quopri):
+    attname_decoded = quopri.decodestring(attname_quopri)[10:-1]
+    return attname_decoded.decode("utf-8")
+
+
+def get_attnames(imap_con, email_id):
     """Находит все названия вложенных файлов, при этом не загружая
     их целиком. Возвращает список названий вложений для email_id."""
-
-    def decode_base64(attname_base64):
-        """Предназначена для устранения ошибки incorrect padding
-        при попытке декодирования. Удаляет от 1 до 4 конечных
-        байт (символов)."""
-
-        main_len = len(attname_base64[10:])
-        # 10 - начало значимой части без "=?utf-8?b?"
-        new_main_len = main_len - (main_len % 4 if main_len % 4 else 4)
-        attname_decoded = base64.b64decode(attname_base64[10:new_main_len+10])
-        return attname_decoded.decode("utf-8")
-
-    def decode_quopri(attname_quopri):
-        attname_decoded = quopri.decodestring(attname_quopri)[10:-1]
-        return attname_decoded.decode("utf-8")
 
     def decode_attname(decode_function):
         if ' ' in attname_enc:
@@ -81,7 +79,7 @@ def get_attnames(ImapObj, email_id):
     total_emails_numb = int(data[0].decode("utf-8"))
     if email_id > total_emails_numb:
         raise imaplib.IMAP4_SSL.error("Указан некорректный email_id", email_id)
-    result, data = ImapObj.fetch(str(email_id), "(BODY)")
+    result, data = imap_con.fetch(str(email_id), "(BODY)")
     email_body = data[0].decode("utf-8")
     pattern = "\"NAME\" "
     pattern_len = len(pattern)
@@ -110,53 +108,45 @@ def get_attnames(ImapObj, email_id):
     return emid_attnames
 
 
-def get_email_ids(ImapObj, criterion):
-    if not criterion:
-        raise TypeError("Не указан обязательный аргумент criterion")
-    result, data = ImapObj.search(None, criterion)
-    if result != "OK":
-        raise imaplib.IMAP4_SSL.error("Не удалось произвести поиск "
-                                      "по критерию %s" % criterion)
-    email_ids = data[0].decode("utf-8").split()
-    return [int(emid) for emid in email_ids]
-
-
-def download_attachment(ImapObj, email_id, attname_list):
+def download_attachment(imap_con, email_id, attname_list):
     dirname = "PRICES"
     current_path = os.path.join(os.environ['HOME'], dirname)
     if not os.path.exists(current_path):
-        os.mkdir(current_path)
+        os.makedirs(current_path)
     for pos, attname in enumerate(attname_list, 1):
-        result, data = ImapObj.fetch(str(email_id), "(BODY[%d])" % (pos+1))
+        result, data = imap_con.fetch(str(email_id), "(BODY[%d])" % (pos+1))
         filepath = os.path.join(current_path, attname)
         with open(filepath, "wb") as f:
             f.write(base64.b64decode(data[0][1]))
-        filename, file_extension = os.path.splitext(filepath)
+        """filename, file_extension = os.path.splitext(filepath)
         if file_extension == ".zip":
             with zipfile.ZipFile(filepath, "r") as myzip:
                 myzip.extractall(current_path)
-            os.remove(filepath)
+            os.remove(filepath)"""
 
+
+def close_connection(imap_con):
+    imap_con.close()
+    imap_con.logout()
 
 if __name__ == "__main__":
-    imap_server = "imap.gmail.com"
+    email_sender = "kacaruba.yura@mail.ru"
+    ids_criterion = 'X-GM-RAW "from:kacaruba.yura has:attachment"'
     email_login = input("Введите адрес электронной почты --- ")
     password = getpass("Введите пароль --- ")
     try:
-        M = connect_mailbox(imap_server, email_login, password)
-    except Exception as e:
+        M = connect_mailbox(email_login, password)
+    except (imaplib.IMAP4_SSL.error, TypeError) as error:
         print("Не удалось подключиться к почтовому ящику.")
-        print(e)
-        print("Завершение программы...")
-        exit()
-    email_ids = get_email_ids(M, 'X-GM-RAW "from:kacaruba.yura has:attachment"')
+        print(error)
+        exit("Завершение программы...")
+    emails_numb = get_emails_number(M, email_sender)
+    email_ids = get_email_ids(M, ids_criterion)
     try:
         for emid in email_ids:
             attname_list = get_attnames(M, emid)
             download_attachment(M, emid, attname_list)
-    except (TypeError, imaplib.IMAP4_SSL.error) as te:
-        print(te)
-        print("Завершение программы...")
-        exit()
-    M.close()
-    M.logout()
+    except (imaplib.IMAP4_SSL.error, TypeError) as error:
+        print(error)
+        exit("Завершение программы...")
+    close_connection(M)
