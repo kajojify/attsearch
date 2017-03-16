@@ -6,7 +6,7 @@ Now its functionality isn't very impressive, because the project is raw and on d
 
 The script attsearch.py contains several useful function to simplify the work with Gmail. 
 
-Basically, it connects to google <b>IMAP server</b> and search emails using keywords. Then the script gets all names of attachments <strong>(without downloading them)</strong> for determine email id. Finally, it downloads them (or just choosen ones) to the specified folder. 
+Basically, it connects to google <b>IMAP server</b> and search emails that contains attachments with determine keywords. Then the script gets all names of attachments <strong>(without downloading them)</strong> for determine email id. Finally, it downloads them (or just choosen ones) to the specified folder. 
 
 So, as you can see, everything is pretty simple :) 
 
