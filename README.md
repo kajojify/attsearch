@@ -1,6 +1,6 @@
 attsearch
 ===================
-This is my little project which I started just for fun. I keep developing it when I have free time. 
+This is my little project which I started just for exploring some features of IMAP protocol. I keep developing it when I have free time. 
 
 Now its functionality isn't very impressive, because the project is raw and on development stage. 
 
