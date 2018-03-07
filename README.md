@@ -1,8 +1,6 @@
 attsearch
 ===================
-This is my little project which I started just for exploring some features of IMAP protocol. I keep developing it when I have free time. 
-
-Now its functionality isn't very impressive, because the project is raw and on development stage. 
+This script is just for exploring some features of IMAP protocol.
 
 The script attsearch.py contains several useful function to simplify the work with Gmail. 
 
